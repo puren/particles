@@ -1,4 +1,0 @@
-particles
-=========
-
-particle implementation

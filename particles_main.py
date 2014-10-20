@@ -10,6 +10,8 @@ TODO:
 1. Turn everything to np array
 2. Parallelization
 3. Optimize loops
+4. add shape matching algorithm for rigid body(müller's paper)
+5. elasticity simulation(müller's paper)
 '''
 
 def integrate(dt, pos, vel, index, gravity, globalDamping, boundaryDamping, radius_s):
@@ -68,11 +70,6 @@ def collide(old_pos, old_vel, worldOrigin, cellSize, gridSize,
                                              attraction, gridCounters, gridCells)
                 
 
-    '''
-    pos2     = colliderPos
-    vel2     = vector(0.0, 0.0, 0.0)
-    radius_2=0.2
-    '''
    
     n_vel[i] = vel+force
     
@@ -198,64 +195,7 @@ def maxElem(a): # Find largest off-diag. element a[k,l]
                 k = i; l = j
     return aMax,k,l
 
-def jacobiRotate(A,R):
-    #print A
-    #print '****'
-    #print 'jacobi'
-    tol=1.0e-09
-    aMax=1.0
-    n = len(A)
-    maxRot = 5*(n**2)       # Set limit on number of rotations
-    p = identity(3)*1.0     # Initialize transformation matrix
-    for i in range(maxRot): # Jacobi rotation loop
-        '''
-        for i in range(maxRot): # Jacobi rotation loop 
-            aMax,k,l = maxElem(a)
-            if aMax < tol: return diag(a)
-            rotate(a,p,k,l)
-        print 'Jacobi method did not converge'
-        '''
-        aMax,k,l = maxElem(A)
-        #print A
-        if aMax > tol:
-            aDiff=A[k,k]-A[l,l]
-            
-            if abs(A[k,l]) < abs(aDiff)*1.0e-36:
-                t = A[k,l]/aDiff
-                
-            else:
-                d=(aDiff)/(2.0*A[k,l])
-                t=1.0/(abs(d)+math.sqrt(d*d+1.0))
-                if(d<0.0): t=-t
-                
-            c=1.0/math.sqrt(t*t+1)
-            s=t*c
-            #print t
-            A[k,k]=A[k,k]+(t*A[k,l])
-            A[l,l]=A[l,l]+(t*A[k,l])
-            A[k,l]=A[l,k]=0.0
-            #for i in range(2):
-            
-            Rkp=c*R[k,k]+s*R[k,l]
-            Rkq=-s*R[k,k]+c*R[k,l]
-            R[k,l]=Rkp
-            R[k,k]=Rkq
-            Rkp=c*R[l,k]+s*R[l,l]
-            Rkq=-s*R[l,k]+c*R[l,l]
-            R[l,l]=Rkp
-            R[l,k]=Rkq
-            '''
-            print '---'
-            print Rkp
-            print Rkq
-            print R
-            print '---'
-            '''
-        else:
-            #print R
-            return R
-           
-    return R           
+    
 
 def polarDecomposition(A, R, S):
     R=np.identity(3)
@@ -338,140 +278,7 @@ def integrate_sm(pos, n_pos, g, vel, dt, n):
         vel[i]=vel[i]+(g[i]-pos[i])*dt1
         pos[i]=n_pos[i]
     
-    '''
-    print g[i]
-    print pos[i]
-    print ''
-    '''
-
-'''
-def projectConstraints(pos, new_pos, noParticles):
-    d=0.05
-    isIn=0
-    p12=vector(0.0,0.0,0.0)
-    for i in range(0, noParticles):
-        for j in range(i, noParticles):
     
-            p12.x=pos[i*3]-pos[j*3]
-            p12.y=pos[i*3+1]-pos[j*3+1]
-            p12.z=pos[i*3+2]-pos[j*3+2]
-            abs_p=p12.mag
-            if abs_p-d<0 and abs_p>0:
-                isIn=1
-                #delta1=-(w1/(w1+w2))*(abs(p12)-d)*(p12/abs(p12))
-                #delta2=(w2/(w1+w2))*(abs(p12)-d)*(p12/abs(p12))
-                delta1=-0.5*(abs_p-d)*(p12.x/abs_p)
-                delta2=0.5*(abs_p-d)*(p12.x/abs_p)
-                new_pos[i*3]=pos[i*3]+delta1
-                new_pos[j*3]=pos[j*3]+delta2
-
-                #delta1=-(w1/(w1+w2))*(abs(p12)-d)*(p12/abs(p12))
-                #delta2=(w2/(w1+w2))*(abs(p12)-d)*(p12/abs(p12))
-                delta1=-0.5*(abs_p-d)*(p12.y/abs_p)
-                delta2=0.5*(abs_p-d)*(p12.y/abs_p)
-                new_pos[i*3+1]=pos[i*3+1]+delta1
-                new_pos[j*3+1]=pos[j*3+1]+delta2
-
-                #delta1=-(w1/(w1+w2))*(abs(p12)-d)*(p12/abs(p12))
-                #delta2=(w2/(w1+w2))*(abs(p12)-d)*(p12/abs(p12))
-                delta1=-0.5*(abs_p-d)*(p12.z/abs_p)
-                delta2=0.5*(abs_p-d)*(p12.z/abs_p)
-                new_pos[i*3+2]=pos[i*3+2]+delta1
-                new_pos[j*3+2]=pos[j*3+2]+delta2
-
-
-def jacobi(a,tol = 1.0e-9): # Jacobi method
- 
-    def maxElem(a): # Find largest off-diag. element a[k,l]
-        n = len(a)
-        aMax = 0.0
-        for i in range(n-1):
-            for j in range(i+1,n):
-                if abs(a[i,j]) >= aMax:
-                    aMax = abs(a[i,j])
-                    k = i; l = j
-        return aMax,k,l
- 
-    def rotate(a,p,k,l): # Rotate to make a[k,l] = 0
-        n = len(a)
-        aDiff = a[l,l] - a[k,k]
-        if abs(a[k,l]) < abs(aDiff)*1.0e-36: t = a[k,l]/aDiff
-        else:
-            phi = aDiff/(2.0*a[k,l])
-            t = 1.0/(abs(phi) + sqrt(phi**2 + 1.0))
-            if phi < 0.0: t = -t
-        c = 1.0/sqrt(t**2 + 1.0); s = t*c
-        tau = s/(1.0 + c)
-        temp = a[k,l]
-        a[k,l] = 0.0
-        a[k,k] = a[k,k] - t*temp
-        a[l,l] = a[l,l] + t*temp
-        for i in range(k):      # Case of i < k
-            temp = a[i,k]
-            a[i,k] = temp - s*(a[i,l] + tau*temp)
-            a[i,l] = a[i,l] + s*(temp - tau*a[i,l])
-        for i in range(k+1,l):  # Case of k < i < l
-            temp = a[k,i]
-            a[k,i] = temp - s*(a[i,l] + tau*a[k,i])
-            a[i,l] = a[i,l] + s*(temp - tau*a[i,l])
-        for i in range(l+1,n):  # Case of i > l
-            temp = a[k,i]
-            a[k,i] = temp - s*(a[l,i] + tau*temp)
-            a[l,i] = a[l,i] + s*(temp - tau*a[l,i])
- 
-    n = len(a)
-    maxRot = 5*(n**2)       # Set limit on number of rotations
-    p = identity(n)*1.0     # Initialize transformation matrix
-    for i in range(maxRot): # Jacobi rotation loop 
-        aMax,k,l = maxElem(a)
-        if aMax < tol: return diag(a)
-        rotate(a,p,k,l)
-    print 'Jacobi method did not converge'
-
-def calcCenterOfMass(pos, n):
-    cm=vector(0.0,0.0,0.0)
-    for i in range(n):
-        cm=cm+pos[i]
-    cm=cm/n
-    return cm
-
-def multVec(p,q):
-    p_arr=np.matrix([p.x, p.y, p.z])
-    p_arr=np.transpose(p_arr)
-    q_arr=[q.x, q.y, q.z]
-    
-    return p_arr*q_arr
-
-def calcApq(pos_o, pos_d, cm_o, cm_d, n):
-    A_pq=[[0.0 for i in range(3) ] for j in range(3)]
-    for i in range(n):
-        q=pos_o[i]-cm_o
-        p=pos_d[i]-cm_d
-        A_pq=A_pq+multVec(p,q)
-
-    return A_pq
-
-def shapeMatching(pos_o, pos_d, g_all, n):
-    cm_o=calcCenterOfMass(pos_o,n)
-    cm_d=calcCenterOfMass(pos_d,n)
-    A_pq=calcApq(pos_o, pos_d, cm_o, cm_d, n)
-    A_pq_T=np.transpose(A_pq)
-    mult=dot(A_pq_T, A_pq)
-    mult_diag=jacobi(mult,3)
-    mult_diag=np.diag(mult_diag)
-    S=np.sqrt(mult_diag)
-    S_inv=np.linalg.inv(S)
-    R=np.dot(A_pq, S_inv)
-
-    arr_cm_o=[cm_o.x, cm_o.y, cm_o.z]
-    for i in range(n):
-        arr_x_o=[pos_o[i].x,pos_o[i].y,pos_o[i].z]
-        arr_x_d=[pos_d[i].x,pos_d[i].y,pos_d[i].z]
-        v1 = np.subtract(arr_x_o,arr_cm_o)
-        v2 = np.dot(R, v1)
-        g  = np.sum([v2,arr_x_d])
-        g_all[i]=vector(g[0,0], g[0,1], g[0,2])
-'''        
 display(title='Examples of particles',
         x=0, y=0, width=900, height=700,
         center=(0,0,0), background=(0,0,0))
@@ -505,10 +312,6 @@ n_vel=[vector(0.0,0.0,0.0) for i in range(numParticles)]
 n_pos=[vector(0.0,0.0,0.0) for i in range(numParticles)]
 org_pos=[vector(0.0,0.0,0.0) for i in range(numParticles)]
 g=[vector(0.0,0.0,0.0) for i in range(numParticles)]
-'''
-n_pos=[vector(0.0,0.0,0.0) for i in range(numParticles)]
-g_all=[vector(0.0,0.0,0.0) for i in range(numParticles)]
-'''
 
 #Create the wall
 side = 1.0
@@ -550,18 +353,10 @@ while 1:
     gridCells=[0 for i in range(numGridCells*maxParticlesPerCell)]
     gridCounter=[0 for i in range(0,numGridCells)]
 
-
     
     for i in range (numParticles):
         integrate(dt, m_hPos, m_hVel, i, gravity, globalDamping, boundaryDamping, radius_s)
     
-    
-    '''
-    shapeMatching(org_pos, n_pos, g, numParticles)
-    
-    integrate_sm(m_hPos, n_pos, g, m_hVel, dt, numParticles)
-
-    '''
     
     for i in range (numParticles):
         ball[i].pos=m_hPos[i]
